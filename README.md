@@ -6,13 +6,30 @@ Google doc to practice for SWE interviews, when you have to write code in a Goog
 
 The interface is intentionally just a blank document. Syntax highlighting and local autosave run in the background. It does not provide code execution, autocomplete, diagnostics, bracket completion, or formatting.
 
-## Run locally
+## Quick start
+
+No installation or build step is required.
+
+### Download
+
+Download the [latest ZIP](https://github.com/rockswe/interviewdoc/archive/refs/heads/main.zip), extract it, then open `index.html` in Chrome. Bookmark the opened page for one-click access later.
+
+### Clone
+
+```bash
+git clone https://github.com/rockswe/interviewdoc.git
+cd interviewdoc
+```
+
+Then open `index.html` directly in your browser.
+
+### Optional local server
 
 ```bash
 npm run dev
 ```
 
-Then open [http://localhost:4173](http://localhost:4173).
+No `npm install` is needed. Then open [http://localhost:4173](http://localhost:4173).
 
 Your document is stored only in the browser's local storage.
 
