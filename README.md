@@ -1,6 +1,6 @@
 # Interview Doc
 
-Google doc to practice for SWE interviews, when you have to write code in a Google Doc with no autocomplete and no way to test it.
+Google doc to practice for SWE interviews (LeetCode-style), when you have to write code in a Google Doc with no autocomplete and no way to test it.
 
 ![Interview Doc showing a Python solution on a document-style page](public/Screenshot%202026-06-19%20at%2019.34.33.png)
 
