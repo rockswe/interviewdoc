@@ -2,7 +2,9 @@
 
 Google doc to practice for SWE interviews, when you have to write code in a Google Doc with no autocomplete and no way to test it.
 
-The interface is intentionally just a blank document. Python syntax highlighting and local autosave run in the background. It does not provide code execution, autocomplete, diagnostics, bracket completion, or formatting.
+![Interview Doc showing a Python solution on a document-style page](public/Screenshot%202026-06-19%20at%2019.34.33.png)
+
+The interface is intentionally just a blank document. Syntax highlighting and local autosave run in the background. It does not provide code execution, autocomplete, diagnostics, bracket completion, or formatting.
 
 ## Run locally
 
