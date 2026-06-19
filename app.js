@@ -3,9 +3,11 @@ const TAB = "    ";
 const DEFAULT_FONT_SIZE = 15;
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 28;
+const DEFAULT_LANGUAGE = "python";
 
 const elements = {
   code: document.querySelector("#code-editor"),
+  language: document.querySelector("#language-select"),
   fontDecrease: document.querySelector("#font-decrease"),
   fontIncrease: document.querySelector("#font-increase"),
   fontSizeDisplay: document.querySelector("#font-size-display"),
@@ -28,8 +30,42 @@ const PYTHON_BUILTINS = new Set([
   "sorted", "staticmethod", "str", "sum", "super", "tuple", "type", "vars", "zip",
 ]);
 
+function words(value) {
+  return new Set(value.split(/\s+/));
+}
+
+const LANGUAGE_CONFIGS = {
+  javascript: {
+    keywords: words("as async await break case catch class const continue debugger default delete do else export extends false finally for from function get if import in instanceof let new null of return set static super switch this throw true try typeof undefined var void while with yield"),
+    builtins: words("Array BigInt Boolean Date Error JSON Map Math Number Object Promise Proxy Reflect RegExp Set String Symbol WeakMap WeakSet console document globalThis window"),
+    definitions: { class: "class-name", function: "function-name" },
+  },
+  typescript: {
+    keywords: words("abstract any as asserts async await bigint boolean break case catch class const constructor continue declare default delete do else enum export extends false finally for from function get if implements import in infer instanceof interface is keyof let module namespace never new null number object of override private protected public readonly require return satisfies set static string super switch symbol this throw true try type typeof undefined unique unknown var void while with yield"),
+    builtins: words("Array Boolean Date Error JSON Map Math Number Object Promise Record RegExp Set String Symbol WeakMap WeakSet console document globalThis window"),
+    definitions: { class: "class-name", enum: "class-name", function: "function-name", interface: "class-name", type: "class-name" },
+  },
+  java: {
+    keywords: words("abstract assert boolean break byte case catch char class const continue default do double else enum extends false final finally float for goto if implements import instanceof int interface long native new null package private protected public record return short static strictfp super switch synchronized this throw throws transient true try var void volatile while"),
+    builtins: words("ArrayList Arrays Boolean Character Collections Double Exception HashMap HashSet Integer Iterable List Long Map Math Object Objects Optional Set String StringBuilder System Thread"),
+    definitions: { class: "class-name", enum: "class-name", interface: "class-name", record: "class-name" },
+  },
+  cpp: {
+    keywords: words("alignas alignof and and_eq asm auto bitand bitor bool break case catch char char16_t char32_t class compl concept const consteval constexpr constinit const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept not not_eq nullptr operator or or_eq private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile wchar_t while xor xor_eq"),
+    builtins: words("array cin cout deque endl list map pair priority_queue queue set size_t stack string unordered_map unordered_set vector"),
+    definitions: { class: "class-name", enum: "class-name", namespace: "class-name", struct: "class-name", union: "class-name" },
+    preprocessor: true,
+  },
+  go: {
+    keywords: words("break case chan const continue default defer else fallthrough false for func go goto if import interface map nil package range return select struct switch true type var"),
+    builtins: words("any append bool byte cap close complex complex128 complex64 copy delete error float32 float64 imag int int16 int32 int64 int8 len make new panic print println real recover rune string uint uint16 uint32 uint64 uint8 uintptr"),
+    definitions: { func: "function-name", type: "class-name" },
+  },
+};
+
 let saveTimer = null;
 let fontSize = DEFAULT_FONT_SIZE;
+let language = DEFAULT_LANGUAGE;
 let isComposing = false;
 
 function escapeHtml(value) {
@@ -143,6 +179,107 @@ function highlightPython(source) {
   return output;
 }
 
+function readGenericString(source, start) {
+  const quote = source[start];
+  if (quote !== "\"" && quote !== "'" && quote !== "`") return null;
+
+  let cursor = start + 1;
+  while (cursor < source.length) {
+    if (source[cursor] === "\\") {
+      cursor += 2;
+      continue;
+    }
+    if (source[cursor] === quote) return source.slice(start, cursor + 1);
+    if (quote !== "`" && source[cursor] === "\n") return source.slice(start, cursor);
+    cursor += 1;
+  }
+
+  return source.slice(start);
+}
+
+function highlightGeneric(source, config) {
+  let output = "";
+  let cursor = 0;
+  let expectedDefinition = null;
+
+  while (cursor < source.length) {
+    const rest = source.slice(cursor);
+    const character = source[cursor];
+
+    if (rest.startsWith("//")) {
+      const end = source.indexOf("\n", cursor);
+      const stop = end === -1 ? source.length : end;
+      output += token("comment", source.slice(cursor, stop));
+      cursor = stop;
+      continue;
+    }
+
+    if (rest.startsWith("/*")) {
+      const end = source.indexOf("*/", cursor + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      output += token("comment", source.slice(cursor, stop));
+      cursor = stop;
+      continue;
+    }
+
+    if (config.preprocessor && character === "#") {
+      const end = source.indexOf("\n", cursor);
+      const stop = end === -1 ? source.length : end;
+      output += token("decorator", source.slice(cursor, stop));
+      cursor = stop;
+      continue;
+    }
+
+    const stringValue = readGenericString(source, cursor);
+    if (stringValue) {
+      output += token("string", stringValue);
+      cursor += stringValue.length;
+      expectedDefinition = null;
+      continue;
+    }
+
+    const number = rest.match(/^(?:0[xX][\dA-Fa-f]+|0[bB][01]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
+    if (number) {
+      output += token("number", number[0]);
+      cursor += number[0].length;
+      expectedDefinition = null;
+      continue;
+    }
+
+    const identifier = rest.match(/^[A-Za-z_$][\w$]*/);
+    if (identifier) {
+      const value = identifier[0];
+      if (expectedDefinition) {
+        output += token(expectedDefinition, value);
+        expectedDefinition = null;
+      } else if (config.keywords.has(value)) {
+        output += token("keyword", value);
+        expectedDefinition = config.definitions[value] || null;
+      } else if (config.builtins.has(value)) {
+        output += token("builtin", value);
+      } else if (/^\s*\(/.test(rest.slice(value.length))) {
+        output += token("function-name", value);
+      } else {
+        output += token("variable", value);
+      }
+      cursor += value.length;
+      continue;
+    }
+
+    output += escapeHtml(character);
+    if (!/\s/.test(character)) expectedDefinition = null;
+    cursor += 1;
+  }
+
+  return output;
+}
+
+function highlightCode(source) {
+  if (language === "plain") return escapeHtml(source);
+  if (language === "python") return highlightPython(source);
+  return highlightGeneric(source, LANGUAGE_CONFIGS[language]);
+}
+
 function getEditorText() {
   return elements.code.textContent || "";
 }
@@ -203,7 +340,7 @@ function restoreSelection(offsets) {
 
 function renderEditor(value, offsets = null) {
   const trailingLine = value === "" || value.endsWith("\n") ? "<br>" : "";
-  elements.code.innerHTML = `${highlightPython(value)}${trailingLine}`;
+  elements.code.innerHTML = `${highlightCode(value)}${trailingLine}`;
   restoreSelection(offsets);
 }
 
@@ -292,7 +429,7 @@ function changeFontSize(amount) {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: getEditorText(), fontSize }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: getEditorText(), fontSize, language }));
 }
 
 function scheduleSave() {
@@ -306,6 +443,9 @@ function loadState() {
     if (!saved) return "";
 
     fontSize = Number.isFinite(saved.fontSize) ? saved.fontSize : DEFAULT_FONT_SIZE;
+    language = Object.hasOwn(LANGUAGE_CONFIGS, saved.language) || saved.language === "python" || saved.language === "plain"
+      ? saved.language
+      : DEFAULT_LANGUAGE;
     return saved.code || "";
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -330,6 +470,14 @@ function handleFontSizeShortcut(event) {
   }
 }
 
+function handleLanguageChange() {
+  const offsets = getSelectionOffsets();
+  language = elements.language.value;
+  renderEditor(getEditorText(), offsets);
+  scheduleSave();
+  elements.code.focus();
+}
+
 elements.code.addEventListener("input", handleEditorInput);
 elements.code.addEventListener("keydown", handleEditorKeydown);
 elements.code.addEventListener("beforeinput", handleBeforeInput);
@@ -344,10 +492,12 @@ elements.code.addEventListener("compositionend", () => {
 });
 elements.fontDecrease.addEventListener("click", () => changeFontSize(-1));
 elements.fontIncrease.addEventListener("click", () => changeFontSize(1));
+elements.language.addEventListener("change", handleLanguageChange);
 document.addEventListener("keydown", handleFontSizeShortcut);
 window.addEventListener("beforeunload", saveState);
 
 const initialCode = loadState();
 applyFontSize(fontSize);
+elements.language.value = language;
 renderEditor(initialCode);
 elements.code.focus();

@@ -29,7 +29,16 @@
       </section>
     </main>
 
-    <div class="font-controls" role="group" aria-label="Font size controls">
+    <div class="font-controls" role="group" aria-label="Editor controls">
+      <select id="language-select" aria-label="Programming language" title="Programming language">
+        <option value="python">Python</option>
+        <option value="javascript">JavaScript</option>
+        <option value="typescript">TypeScript</option>
+        <option value="java">Java</option>
+        <option value="cpp">C++</option>
+        <option value="go">Go</option>
+        <option value="plain">Plain text</option>
+      </select>
       <button id="font-decrease" type="button" aria-label="Decrease font size" title="Decrease font size (Cmd/Ctrl -)">−</button>
       <output id="font-size-display" aria-live="polite">100%</output>
       <button id="font-increase" type="button" aria-label="Increase font size" title="Increase font size (Cmd/Ctrl +)">+</button>

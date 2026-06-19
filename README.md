@@ -15,3 +15,5 @@ Then open [http://localhost:4173](http://localhost:4173).
 Your document is stored only in the browser's local storage.
 
 Use the control in the bottom-right corner to change the document font size. `Cmd/Ctrl +` and `Cmd/Ctrl -` adjust it from the keyboard; `Cmd/Ctrl 0` restores the default.
+
+The language selector supports Python, JavaScript, TypeScript, Java, C++, Go, and plain text highlighting.
