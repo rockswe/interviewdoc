@@ -13,22 +13,27 @@
   <body>
     <main class="canvas">
       <section class="page" aria-label="Interview document">
-        <div class="editor-layers">
-          <pre class="highlight-layer" id="highlight-layer" aria-hidden="true"><code></code></pre>
-          <textarea
-            id="code-input"
-            class="code-input"
+        <div class="editor-surface">
+          <pre
+            id="code-editor"
+            class="code-editor"
+            contenteditable="true"
+            role="textbox"
             aria-label="Interview document"
-            autocomplete="off"
+            aria-multiline="true"
             autocapitalize="off"
             autocorrect="off"
             spellcheck="false"
-            wrap="off"
-            autofocus
-          ></textarea>
+          ></pre>
         </div>
       </section>
     </main>
+
+    <div class="font-controls" role="group" aria-label="Font size controls">
+      <button id="font-decrease" type="button" aria-label="Decrease font size" title="Decrease font size (Cmd/Ctrl -)">−</button>
+      <output id="font-size-display" aria-live="polite">100%</output>
+      <button id="font-increase" type="button" aria-label="Increase font size" title="Increase font size (Cmd/Ctrl +)">+</button>
+    </div>
 
     <script src="app.js"></script>
   </body>

@@ -41,13 +41,12 @@ body {
   box-shadow: 0 1px 3px rgba(60, 64, 67, 0.16);
 }
 
-.editor-layers {
+.editor-surface {
   position: absolute;
   inset: 94px 88px 96px;
 }
 
-.highlight-layer,
-.code-input {
+.code-editor {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -58,7 +57,7 @@ body {
   border: 0;
   outline: 0;
   tab-size: 4;
-  font-family: "Courier New", Courier, monospace;
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: var(--font-size);
   font-variant-ligatures: none;
   font-weight: 400;
@@ -67,32 +66,19 @@ body {
   white-space: pre;
   word-spacing: 0;
   scrollbar-width: none;
+  color: var(--ink);
+  background: transparent;
+  caret-color: var(--ink);
+  cursor: text;
 }
 
-.highlight-layer::-webkit-scrollbar,
-.code-input::-webkit-scrollbar {
+.code-editor::-webkit-scrollbar {
   display: none;
 }
 
-.highlight-layer {
-  z-index: 1;
-  pointer-events: none;
-  color: var(--ink);
-  background: transparent;
-}
-
-.code-input {
-  z-index: 2;
-  resize: none;
-  color: transparent;
-  caret-color: var(--ink);
-  background: transparent;
-  -webkit-text-fill-color: transparent;
-}
-
-.code-input::selection {
+.code-editor::selection,
+.code-editor *::selection {
   background: rgba(66, 133, 244, 0.28);
-  -webkit-text-fill-color: transparent;
 }
 
 .token-keyword {
@@ -131,6 +117,64 @@ body {
   color: #001080;
 }
 
+.font-controls {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dadce0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.18);
+  opacity: 0.58;
+  transition: opacity 120ms ease;
+}
+
+.font-controls:hover,
+.font-controls:focus-within {
+  opacity: 1;
+}
+
+.font-controls button {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  color: #3c4043;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.font-controls button:hover {
+  background: #f1f3f4;
+}
+
+.font-controls button:focus-visible {
+  position: relative;
+  outline: 2px solid #1a73e8;
+  outline-offset: -2px;
+}
+
+.font-controls button:disabled {
+  color: #bdc1c6;
+  cursor: default;
+}
+
+.font-controls output {
+  min-width: 46px;
+  color: #5f6368;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  user-select: none;
+}
+
 @media (max-width: 700px) {
   .canvas {
     padding: 20px 14px 48px;
@@ -140,7 +184,12 @@ body {
     width: calc(100vw - 28px);
   }
 
-  .editor-layers {
+  .editor-surface {
     inset: 68px 48px 72px;
+  }
+
+  .font-controls {
+    right: 10px;
+    bottom: 10px;
   }
 }

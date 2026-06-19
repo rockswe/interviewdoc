@@ -1,10 +1,14 @@
 const STORAGE_KEY = "interview-doc-state-v1";
 const TAB = "    ";
+const DEFAULT_FONT_SIZE = 15;
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 28;
 
 const elements = {
-  code: document.querySelector("#code-input"),
-  highlight: document.querySelector("#highlight-layer code"),
-  highlightScroller: document.querySelector("#highlight-layer"),
+  code: document.querySelector("#code-editor"),
+  fontDecrease: document.querySelector("#font-decrease"),
+  fontIncrease: document.querySelector("#font-increase"),
+  fontSizeDisplay: document.querySelector("#font-size-display"),
 };
 
 const PYTHON_KEYWORDS = new Set([
@@ -25,6 +29,8 @@ const PYTHON_BUILTINS = new Set([
 ]);
 
 let saveTimer = null;
+let fontSize = DEFAULT_FONT_SIZE;
+let isComposing = false;
 
 function escapeHtml(value) {
   return value
@@ -137,19 +143,156 @@ function highlightPython(source) {
   return output;
 }
 
-function updateEditor() {
-  const value = elements.code.value;
-  elements.highlight.innerHTML = `${highlightPython(value)}${value.endsWith("\n") ? " " : ""}`;
-  syncScroll();
+function getEditorText() {
+  return elements.code.textContent || "";
 }
 
-function syncScroll() {
-  elements.highlightScroller.scrollTop = elements.code.scrollTop;
-  elements.highlightScroller.scrollLeft = elements.code.scrollLeft;
+function getSelectionOffsets() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+
+  const range = selection.getRangeAt(0);
+  if (!elements.code.contains(range.startContainer) || !elements.code.contains(range.endContainer)) {
+    return null;
+  }
+
+  const startRange = range.cloneRange();
+  startRange.selectNodeContents(elements.code);
+  startRange.setEnd(range.startContainer, range.startOffset);
+
+  const endRange = range.cloneRange();
+  endRange.selectNodeContents(elements.code);
+  endRange.setEnd(range.endContainer, range.endOffset);
+
+  return {
+    start: startRange.toString().length,
+    end: endRange.toString().length,
+  };
+}
+
+function findTextPosition(offset) {
+  const walker = document.createTreeWalker(elements.code, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let remaining = offset;
+
+  while (node) {
+    if (remaining <= node.textContent.length) {
+      return { node, offset: remaining };
+    }
+    remaining -= node.textContent.length;
+    node = walker.nextNode();
+  }
+
+  return { node: elements.code, offset: elements.code.childNodes.length };
+}
+
+function restoreSelection(offsets) {
+  if (!offsets) return;
+
+  const textLength = getEditorText().length;
+  const start = findTextPosition(Math.min(offsets.start, textLength));
+  const end = findTextPosition(Math.min(offsets.end, textLength));
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function renderEditor(value, offsets = null) {
+  const trailingLine = value === "" || value.endsWith("\n") ? "<br>" : "";
+  elements.code.innerHTML = `${highlightPython(value)}${trailingLine}`;
+  restoreSelection(offsets);
+}
+
+function applyTextChange(value, start, end = start) {
+  renderEditor(value, { start, end });
+  scheduleSave();
+}
+
+function insertTextAtSelection(text) {
+  const offsets = getSelectionOffsets() || { start: getEditorText().length, end: getEditorText().length };
+  const value = getEditorText();
+  const nextValue = value.slice(0, offsets.start) + text + value.slice(offsets.end);
+  const nextOffset = offsets.start + text.length;
+  applyTextChange(nextValue, nextOffset);
+}
+
+function handleEditorInput() {
+  if (isComposing) return;
+  const offsets = getSelectionOffsets();
+  renderEditor(getEditorText(), offsets);
+  scheduleSave();
+}
+
+function handleEditorKeydown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    insertTextAtSelection("\n");
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+  event.preventDefault();
+
+  const offsets = getSelectionOffsets() || { start: 0, end: 0 };
+  const value = getEditorText();
+  const lineStart = value.lastIndexOf("\n", offsets.start - 1) + 1;
+
+  if (event.shiftKey) {
+    const selectedBlock = value.slice(lineStart, offsets.end);
+    const unindented = selectedBlock.replace(/^ {1,4}/gm, "");
+    const beforeSelection = value.slice(lineStart, offsets.start);
+    const removedBeforeStart = beforeSelection.length - beforeSelection.replace(/^ {1,4}/gm, "").length;
+    const removedTotal = selectedBlock.length - unindented.length;
+    const nextValue = value.slice(0, lineStart) + unindented + value.slice(offsets.end);
+
+    applyTextChange(
+      nextValue,
+      Math.max(lineStart, offsets.start - removedBeforeStart),
+      offsets.end - removedTotal,
+    );
+  } else if (offsets.start !== offsets.end && value.slice(offsets.start, offsets.end).includes("\n")) {
+    const selectedBlock = value.slice(lineStart, offsets.end);
+    const indented = selectedBlock.replace(/^/gm, TAB);
+    const nextValue = value.slice(0, lineStart) + indented + value.slice(offsets.end);
+
+    applyTextChange(nextValue, offsets.start + TAB.length, lineStart + indented.length);
+  } else {
+    insertTextAtSelection(TAB);
+  }
+}
+
+function handleBeforeInput(event) {
+  if (event.inputType !== "insertParagraph" && event.inputType !== "insertLineBreak") return;
+  event.preventDefault();
+  insertTextAtSelection("\n");
+}
+
+function handlePaste(event) {
+  event.preventDefault();
+  const text = event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
+  insertTextAtSelection(text);
+}
+
+function applyFontSize(nextSize) {
+  fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, nextSize));
+  document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
+  elements.fontSizeDisplay.textContent = `${Math.round((fontSize / DEFAULT_FONT_SIZE) * 100)}%`;
+  elements.fontDecrease.disabled = fontSize === MIN_FONT_SIZE;
+  elements.fontIncrease.disabled = fontSize === MAX_FONT_SIZE;
+}
+
+function changeFontSize(amount) {
+  applyFontSize(fontSize + amount);
+  scheduleSave();
+  elements.code.focus();
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: elements.code.value }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: getEditorText(), fontSize }));
 }
 
 function scheduleSave() {
@@ -160,54 +303,51 @@ function scheduleSave() {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved) return;
+    if (!saved) return "";
 
-    elements.code.value = saved.code || "";
+    fontSize = Number.isFinite(saved.fontSize) ? saved.fontSize : DEFAULT_FONT_SIZE;
+    return saved.code || "";
   } catch {
     localStorage.removeItem(STORAGE_KEY);
+    return "";
   }
 }
 
-function handleCodeKeydown(event) {
-  if (event.key !== "Tab") return;
-  event.preventDefault();
+function handleFontSizeShortcut(event) {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
 
-  const { selectionStart, selectionEnd, value } = elements.code;
-  const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
-
-  if (event.shiftKey) {
-    const selectedBlock = value.slice(lineStart, selectionEnd);
-    const unindented = selectedBlock.replace(/^ {1,4}/gm, "");
-    const removedBeforeStart = value.slice(lineStart, selectionStart).length
-      - value.slice(lineStart, selectionStart).replace(/^ {1,4}/gm, "").length;
-    const removedTotal = selectedBlock.length - unindented.length;
-
-    elements.code.setRangeText(unindented, lineStart, selectionEnd, "start");
-    elements.code.setSelectionRange(
-      Math.max(lineStart, selectionStart - removedBeforeStart),
-      selectionEnd - removedTotal,
-    );
-  } else if (selectionStart !== selectionEnd && value.slice(selectionStart, selectionEnd).includes("\n")) {
-    const selectedBlock = value.slice(lineStart, selectionEnd);
-    const indented = selectedBlock.replace(/^/gm, TAB);
-    elements.code.setRangeText(indented, lineStart, selectionEnd, "start");
-    elements.code.setSelectionRange(selectionStart + TAB.length, lineStart + indented.length);
-  } else {
-    elements.code.setRangeText(TAB, selectionStart, selectionEnd, "end");
+  if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    changeFontSize(1);
+  } else if (event.key === "-") {
+    event.preventDefault();
+    changeFontSize(-1);
+  } else if (event.key === "0") {
+    event.preventDefault();
+    applyFontSize(DEFAULT_FONT_SIZE);
+    scheduleSave();
+    elements.code.focus();
   }
-
-  updateEditor();
-  scheduleSave();
 }
 
-elements.code.addEventListener("input", () => {
-  updateEditor();
-  scheduleSave();
+elements.code.addEventListener("input", handleEditorInput);
+elements.code.addEventListener("keydown", handleEditorKeydown);
+elements.code.addEventListener("beforeinput", handleBeforeInput);
+elements.code.addEventListener("paste", handlePaste);
+elements.code.addEventListener("drop", (event) => event.preventDefault());
+elements.code.addEventListener("compositionstart", () => {
+  isComposing = true;
 });
-elements.code.addEventListener("scroll", syncScroll);
-elements.code.addEventListener("keydown", handleCodeKeydown);
-
+elements.code.addEventListener("compositionend", () => {
+  isComposing = false;
+  handleEditorInput();
+});
+elements.fontDecrease.addEventListener("click", () => changeFontSize(-1));
+elements.fontIncrease.addEventListener("click", () => changeFontSize(1));
+document.addEventListener("keydown", handleFontSizeShortcut);
 window.addEventListener("beforeunload", saveState);
 
-loadState();
-updateEditor();
+const initialCode = loadState();
+applyFontSize(fontSize);
+renderEditor(initialCode);
+elements.code.focus();
