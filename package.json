@@ -1,0 +1,10 @@
+{
+  "name": "interview-doc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Google doc to practice for SWE interviews, when you have to write code in a Google Doc with no autocomplete and no way to test it.",
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "check": "node --check app.js"
+  }
+}

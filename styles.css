@@ -1,0 +1,146 @@
+:root {
+  color-scheme: light;
+  --canvas: #f8f9fa;
+  --paper: #ffffff;
+  --page-border: #dadce0;
+  --ink: #202124;
+  --font-size: 15px;
+  --line-height: 1.6;
+  font-family: Arial, Helvetica, sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--ink);
+  background: var(--canvas);
+}
+
+.canvas {
+  min-height: 100vh;
+  overflow: auto;
+  padding: 36px 32px 72px;
+}
+
+.page {
+  width: min(816px, calc(100vw - 64px));
+  height: 1056px;
+  position: relative;
+  margin: 0 auto;
+  border: 1px solid var(--page-border);
+  background: var(--paper);
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.16);
+}
+
+.editor-layers {
+  position: absolute;
+  inset: 94px 88px 96px;
+}
+
+.highlight-layer,
+.code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  outline: 0;
+  tab-size: 4;
+  font-family: "Courier New", Courier, monospace;
+  font-size: var(--font-size);
+  font-variant-ligatures: none;
+  font-weight: 400;
+  line-height: var(--line-height);
+  letter-spacing: 0;
+  white-space: pre;
+  word-spacing: 0;
+  scrollbar-width: none;
+}
+
+.highlight-layer::-webkit-scrollbar,
+.code-input::-webkit-scrollbar {
+  display: none;
+}
+
+.highlight-layer {
+  z-index: 1;
+  pointer-events: none;
+  color: var(--ink);
+  background: transparent;
+}
+
+.code-input {
+  z-index: 2;
+  resize: none;
+  color: transparent;
+  caret-color: var(--ink);
+  background: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.code-input::selection {
+  background: rgba(66, 133, 244, 0.28);
+  -webkit-text-fill-color: transparent;
+}
+
+.token-keyword {
+  color: #0000ff;
+}
+
+.token-builtin {
+  color: #267f99;
+}
+
+.token-string {
+  color: #a31515;
+}
+
+.token-number {
+  color: #098658;
+}
+
+.token-comment {
+  color: #008000;
+}
+
+.token-decorator {
+  color: #795e26;
+}
+
+.token-class-name {
+  color: #267f99;
+}
+
+.token-function-name {
+  color: #795e26;
+}
+
+.token-variable {
+  color: #001080;
+}
+
+@media (max-width: 700px) {
+  .canvas {
+    padding: 20px 14px 48px;
+  }
+
+  .page {
+    width: calc(100vw - 28px);
+  }
+
+  .editor-layers {
+    inset: 68px 48px 72px;
+  }
+}

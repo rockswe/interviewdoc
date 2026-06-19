@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Google doc to practice for SWE interviews, when you have to write code in a Google Doc with no autocomplete and no way to test it."
+    />
+    <title>Interview Doc</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="canvas">
+      <section class="page" aria-label="Interview document">
+        <div class="editor-layers">
+          <pre class="highlight-layer" id="highlight-layer" aria-hidden="true"><code></code></pre>
+          <textarea
+            id="code-input"
+            class="code-input"
+            aria-label="Interview document"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            wrap="off"
+            autofocus
+          ></textarea>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
