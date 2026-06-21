@@ -4,9 +4,11 @@ const DEFAULT_FONT_SIZE = 15;
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 28;
 const DEFAULT_LANGUAGE = "python";
-const DEFAULT_PANEL_WIDTH = 420;
-const MIN_PANEL_WIDTH = 320;
-const MAX_PANEL_WIDTH = 1200;
+const DEFAULT_PANEL_RATIO = 0.33;
+const MIN_PANEL_RATIO = 0.15;
+const MAX_PANEL_RATIO = 0.66;
+const MIN_PANEL_WIDTH = 280;
+const MIN_DOC_WIDTH = 360;
 
 const elements = {
   appShell: document.querySelector("#app-shell"),
@@ -82,7 +84,7 @@ let fontSize = DEFAULT_FONT_SIZE;
 let language = DEFAULT_LANGUAGE;
 let isComposing = false;
 let panelOpen = true;
-let panelWidth = DEFAULT_PANEL_WIDTH;
+let panelRatio = DEFAULT_PANEL_RATIO;
 let screenshot = null;
 
 function escapeHtml(value) {
@@ -466,10 +468,20 @@ function deleteScreenshot() {
   saveState();
 }
 
-function setPanelWidth(value) {
-  const availableMaximum = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, window.innerWidth - 80));
-  panelWidth = Math.round(Math.max(MIN_PANEL_WIDTH, Math.min(availableMaximum, value)));
-  document.documentElement.style.setProperty("--panel-width", `${panelWidth}px`);
+function panelWidthFromRatio() {
+  // Scale with the window, but keep the screenshot usable and never crush the doc.
+  const maxWidth = Math.max(MIN_PANEL_WIDTH, window.innerWidth - MIN_DOC_WIDTH);
+  const target = window.innerWidth * panelRatio;
+  return Math.round(Math.min(maxWidth, Math.max(MIN_PANEL_WIDTH, target)));
+}
+
+function applyPanelWidth() {
+  document.documentElement.style.setProperty("--panel-width", `${panelWidthFromRatio()}px`);
+}
+
+function setPanelRatio(ratio) {
+  panelRatio = Math.min(MAX_PANEL_RATIO, Math.max(MIN_PANEL_RATIO, ratio));
+  applyPanelWidth();
 }
 
 function setPanelOpen(nextOpen, focusControl = false) {
@@ -489,7 +501,7 @@ function beginPanelResize(event) {
 
 function resizePanel(event) {
   if (!elements.panelResizer.hasPointerCapture(event.pointerId)) return;
-  setPanelWidth(event.clientX);
+  setPanelRatio(event.clientX / window.innerWidth);
 }
 
 function endPanelResize(event) {
@@ -502,7 +514,7 @@ function endPanelResize(event) {
 function handleResizerKeydown(event) {
   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
   event.preventDefault();
-  setPanelWidth(panelWidth + (event.key === "ArrowRight" ? 16 : -16));
+  setPanelRatio(panelRatio + (event.key === "ArrowRight" ? 0.02 : -0.02));
   scheduleSave();
 }
 
@@ -526,7 +538,7 @@ function saveState() {
     fontSize,
     language,
     panelOpen,
-    panelWidth,
+    panelRatio,
     screenshot,
   }));
 }
@@ -546,7 +558,11 @@ function loadState() {
       ? saved.language
       : DEFAULT_LANGUAGE;
     panelOpen = typeof saved.panelOpen === "boolean" ? saved.panelOpen : true;
-    panelWidth = Number.isFinite(saved.panelWidth) ? saved.panelWidth : DEFAULT_PANEL_WIDTH;
+    if (Number.isFinite(saved.panelRatio)) {
+      panelRatio = Math.min(MAX_PANEL_RATIO, Math.max(MIN_PANEL_RATIO, saved.panelRatio));
+    } else if (Number.isFinite(saved.panelWidth) && window.innerWidth > 0) {
+      panelRatio = Math.min(MAX_PANEL_RATIO, Math.max(MIN_PANEL_RATIO, saved.panelWidth / window.innerWidth));
+    }
     screenshot = typeof saved.screenshot === "string" && saved.screenshot.startsWith("data:image/")
       ? saved.screenshot
       : null;
@@ -613,11 +629,11 @@ elements.screenshotDelete.addEventListener("click", deleteScreenshot);
 document.addEventListener("paste", handleScreenshotPaste);
 document.addEventListener("keydown", handleFontSizeShortcut);
 window.addEventListener("beforeunload", saveState);
-window.addEventListener("resize", () => setPanelWidth(panelWidth));
+window.addEventListener("resize", applyPanelWidth);
 
 const initialCode = loadState();
 applyFontSize(fontSize);
-setPanelWidth(panelWidth);
+applyPanelWidth();
 setPanelOpen(panelOpen);
 elements.language.value = language;
 renderScreenshot();
