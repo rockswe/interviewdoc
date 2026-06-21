@@ -9,6 +9,11 @@ const MIN_PANEL_RATIO = 0.15;
 const MAX_PANEL_RATIO = 0.66;
 const MIN_PANEL_WIDTH = 280;
 const MIN_DOC_WIDTH = 360;
+const DB_NAME = "interview-doc";
+const DB_VERSION = 1;
+const DB_STORE = "screenshots";
+const MAX_IMAGE_DIM = 1600;
+const WEBP_QUALITY = 0.85;
 
 const elements = {
   appShell: document.querySelector("#app-shell"),
@@ -27,6 +32,10 @@ const elements = {
   screenshotUpload: document.querySelector("#screenshot-upload"),
   screenshotFile: document.querySelector("#screenshot-file"),
   screenshotDelete: document.querySelector("#screenshot-delete"),
+  screenshotNav: document.querySelector("#screenshot-nav"),
+  screenshotPrev: document.querySelector("#screenshot-prev"),
+  screenshotNext: document.querySelector("#screenshot-next"),
+  screenshotCounter: document.querySelector("#screenshot-counter"),
 };
 
 const PYTHON_KEYWORDS = new Set([
@@ -85,7 +94,10 @@ let language = DEFAULT_LANGUAGE;
 let isComposing = false;
 let panelOpen = true;
 let panelRatio = DEFAULT_PANEL_RATIO;
-let screenshot = null;
+let deck = [];
+let screenshotIndex = 0;
+let legacyScreenshot = null;
+let currentObjectUrl = null;
 
 function escapeHtml(value) {
   return value
@@ -433,24 +445,104 @@ function handlePaste(event) {
   insertTextAtSelection(text);
 }
 
+function openScreenshotDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: "id", autoIncrement: true });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function dbGetAllScreenshots() {
+  return openScreenshotDb().then((db) => new Promise((resolve, reject) => {
+    const request = db.transaction(DB_STORE, "readonly").objectStore(DB_STORE).getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  }));
+}
+
+function dbAddScreenshot(blob) {
+  return openScreenshotDb().then((db) => new Promise((resolve, reject) => {
+    const request = db.transaction(DB_STORE, "readwrite").objectStore(DB_STORE).add({ blob });
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  }));
+}
+
+function dbDeleteScreenshot(id) {
+  return openScreenshotDb().then((db) => new Promise((resolve, reject) => {
+    const request = db.transaction(DB_STORE, "readwrite").objectStore(DB_STORE).delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  }));
+}
+
+// Shrink to a sane max dimension and re-encode so a deck of many problems fits.
+async function downscaleToWebp(source) {
+  const bitmap = await createImageBitmap(source);
+  const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+  if (bitmap.close) bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", WEBP_QUALITY));
+  return blob || source;
+}
+
 function renderScreenshot() {
-  const hasScreenshot = Boolean(screenshot);
-  elements.screenshotEmpty.hidden = hasScreenshot;
-  elements.screenshotView.hidden = !hasScreenshot;
-  elements.screenshotImage.src = hasScreenshot ? screenshot : "";
+  const count = deck.length;
+  elements.screenshotEmpty.hidden = count > 0;
+  elements.screenshotView.hidden = count === 0;
+
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = null;
+  }
+
+  if (count === 0) {
+    elements.screenshotImage.removeAttribute("src");
+    elements.screenshotNav.hidden = true;
+    return;
+  }
+
+  screenshotIndex = Math.min(Math.max(screenshotIndex, 0), count - 1);
+  currentObjectUrl = URL.createObjectURL(deck[screenshotIndex].blob);
+  elements.screenshotImage.src = currentObjectUrl;
+
+  elements.screenshotNav.hidden = count <= 1;
+  elements.screenshotCounter.textContent = `${screenshotIndex + 1} / ${count}`;
+  elements.screenshotPrev.disabled = screenshotIndex === 0;
+  elements.screenshotNext.disabled = screenshotIndex === count - 1;
 }
 
-function setScreenshot(dataUrl) {
-  screenshot = dataUrl;
-  renderScreenshot();
-  saveState();
-}
+async function addScreenshot(source) {
+  if (!source || !source.type || !source.type.startsWith("image/")) return;
 
-function readImageFile(file) {
-  if (!file || !file.type.startsWith("image/")) return;
-  const reader = new FileReader();
-  reader.addEventListener("load", () => setScreenshot(String(reader.result)));
-  reader.readAsDataURL(file);
+  let blob;
+  try {
+    blob = await downscaleToWebp(source);
+  } catch {
+    blob = source;
+  }
+
+  try {
+    const id = await dbAddScreenshot(blob);
+    deck.push({ id, blob });
+    screenshotIndex = deck.length - 1;
+    renderScreenshot();
+    saveState();
+  } catch {
+    /* storage unavailable; leave the deck unchanged */
+  }
 }
 
 function handleScreenshotPaste(event) {
@@ -459,11 +551,49 @@ function handleScreenshotPaste(event) {
   if (!imageItem) return;
 
   event.preventDefault();
-  readImageFile(imageItem.getAsFile());
+  addScreenshot(imageItem.getAsFile());
 }
 
-function deleteScreenshot() {
-  screenshot = null;
+function showScreenshot(index) {
+  screenshotIndex = Math.min(Math.max(index, 0), deck.length - 1);
+  renderScreenshot();
+  saveState();
+}
+
+async function deleteScreenshot() {
+  if (deck.length === 0) return;
+
+  const { id } = deck[screenshotIndex];
+  try {
+    await dbDeleteScreenshot(id);
+  } catch {
+    /* ignore */
+  }
+  deck.splice(screenshotIndex, 1);
+  screenshotIndex = Math.max(0, Math.min(screenshotIndex, deck.length - 1));
+  renderScreenshot();
+  saveState();
+}
+
+async function loadDeck() {
+  try {
+    deck = await dbGetAllScreenshots();
+  } catch {
+    deck = [];
+  }
+
+  // One-time migration of the old single screenshot from localStorage.
+  if (deck.length === 0 && legacyScreenshot) {
+    try {
+      const blob = await downscaleToWebp(await (await fetch(legacyScreenshot)).blob());
+      const id = await dbAddScreenshot(blob);
+      deck = [{ id, blob }];
+    } catch {
+      /* migration failed; ignore */
+    }
+  }
+
+  legacyScreenshot = null;
   renderScreenshot();
   saveState();
 }
@@ -539,7 +669,7 @@ function saveState() {
     language,
     panelOpen,
     panelRatio,
-    screenshot,
+    screenshotIndex,
   }));
 }
 
@@ -563,7 +693,8 @@ function loadState() {
     } else if (Number.isFinite(saved.panelWidth) && window.innerWidth > 0) {
       panelRatio = Math.min(MAX_PANEL_RATIO, Math.max(MIN_PANEL_RATIO, saved.panelWidth / window.innerWidth));
     }
-    screenshot = typeof saved.screenshot === "string" && saved.screenshot.startsWith("data:image/")
+    screenshotIndex = Number.isInteger(saved.screenshotIndex) ? saved.screenshotIndex : 0;
+    legacyScreenshot = typeof saved.screenshot === "string" && saved.screenshot.startsWith("data:image/")
       ? saved.screenshot
       : null;
     return saved.code || "";
@@ -622,10 +753,12 @@ elements.panelResizer.addEventListener("pointercancel", endPanelResize);
 elements.panelResizer.addEventListener("keydown", handleResizerKeydown);
 elements.screenshotUpload.addEventListener("click", () => elements.screenshotFile.click());
 elements.screenshotFile.addEventListener("change", () => {
-  readImageFile(elements.screenshotFile.files[0]);
+  addScreenshot(elements.screenshotFile.files[0]);
   elements.screenshotFile.value = "";
 });
 elements.screenshotDelete.addEventListener("click", deleteScreenshot);
+elements.screenshotPrev.addEventListener("click", () => showScreenshot(screenshotIndex - 1));
+elements.screenshotNext.addEventListener("click", () => showScreenshot(screenshotIndex + 1));
 document.addEventListener("paste", handleScreenshotPaste);
 document.addEventListener("keydown", handleFontSizeShortcut);
 window.addEventListener("beforeunload", saveState);
@@ -636,6 +769,6 @@ applyFontSize(fontSize);
 applyPanelWidth();
 setPanelOpen(panelOpen);
 elements.language.value = language;
-renderScreenshot();
 renderEditor(initialCode);
 elements.code.focus();
+loadDeck();

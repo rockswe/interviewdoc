@@ -211,6 +211,52 @@ button {
   outline-offset: 1px;
 }
 
+.screenshot-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.screenshot-navbtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  color: #3c4043;
+  background: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.screenshot-navbtn:hover:not(:disabled) {
+  background: #f1f3f4;
+}
+
+.screenshot-navbtn:disabled {
+  color: #bdc1c6;
+  cursor: default;
+}
+
+.screenshot-navbtn:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 1px;
+}
+
+.screenshot-counter {
+  min-width: 48px;
+  color: #5f6368;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  user-select: none;
+}
+
 .panel-resizer {
   position: fixed;
   top: 0;
