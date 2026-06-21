@@ -4,7 +4,9 @@ Google doc to practice for SWE interviews (LeetCode-style), when you have to wri
 
 ![Interview Doc showing a Python solution on a document-style page](public/Screenshot%202026-06-19%20at%2019.34.33.png)
 
-The interface centers on a blank document with an optional, resizable problem panel. Paste a copied problem statement into the panel to preserve its title, difficulty, examples, inline code, and constraints. A source URL can be saved with the problem, but the app does not fetch or scrape the source page.
+The interface centers on a blank document with an optional, resizable problem panel. Paste a screenshot of the problem into the panel (Cmd/Ctrl+V) or upload an image, then delete it to move on to the next question. The panel scales with the window and sits beside the document, so the problem stays in view while you write.
+
+![A LeetCode problem screenshot pinned in the side panel next to a Python solution in the document](public/Screenshot%202026-06-22%20at%2000.31.39.png)
 
 Syntax highlighting and local autosave run in the background. The editor does not provide code execution, autocomplete, diagnostics, bracket completion, or formatting.
 
@@ -33,7 +35,7 @@ npm run dev
 
 No `npm install` is needed. Then open [http://localhost:4173](http://localhost:4173).
 
-Your document and imported problem are stored only in the browser's local storage.
+Your document and the pasted screenshot are stored only in the browser's local storage.
 
 Use the control in the bottom-right corner to change the document font size. `Cmd/Ctrl +` and `Cmd/Ctrl -` adjust it from the keyboard; `Cmd/Ctrl 0` restores the default.
 
