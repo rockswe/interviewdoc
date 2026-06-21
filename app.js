@@ -4,13 +4,27 @@ const DEFAULT_FONT_SIZE = 15;
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 28;
 const DEFAULT_LANGUAGE = "python";
+const DEFAULT_PANEL_WIDTH = 420;
+const MIN_PANEL_WIDTH = 320;
+const MAX_PANEL_WIDTH = 1200;
 
 const elements = {
+  appShell: document.querySelector("#app-shell"),
   code: document.querySelector("#code-editor"),
   language: document.querySelector("#language-select"),
   fontDecrease: document.querySelector("#font-decrease"),
   fontIncrease: document.querySelector("#font-increase"),
   fontSizeDisplay: document.querySelector("#font-size-display"),
+  panel: document.querySelector("#problem-panel"),
+  panelClose: document.querySelector("#panel-close"),
+  panelOpen: document.querySelector("#panel-open"),
+  panelResizer: document.querySelector("#panel-resizer"),
+  screenshotEmpty: document.querySelector("#screenshot-empty"),
+  screenshotView: document.querySelector("#screenshot-view"),
+  screenshotImage: document.querySelector("#screenshot-image"),
+  screenshotUpload: document.querySelector("#screenshot-upload"),
+  screenshotFile: document.querySelector("#screenshot-file"),
+  screenshotDelete: document.querySelector("#screenshot-delete"),
 };
 
 const PYTHON_KEYWORDS = new Set([
@@ -67,6 +81,9 @@ let saveTimer = null;
 let fontSize = DEFAULT_FONT_SIZE;
 let language = DEFAULT_LANGUAGE;
 let isComposing = false;
+let panelOpen = true;
+let panelWidth = DEFAULT_PANEL_WIDTH;
+let screenshot = null;
 
 function escapeHtml(value) {
   return value
@@ -414,6 +431,81 @@ function handlePaste(event) {
   insertTextAtSelection(text);
 }
 
+function renderScreenshot() {
+  const hasScreenshot = Boolean(screenshot);
+  elements.screenshotEmpty.hidden = hasScreenshot;
+  elements.screenshotView.hidden = !hasScreenshot;
+  elements.screenshotImage.src = hasScreenshot ? screenshot : "";
+}
+
+function setScreenshot(dataUrl) {
+  screenshot = dataUrl;
+  renderScreenshot();
+  saveState();
+}
+
+function readImageFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const reader = new FileReader();
+  reader.addEventListener("load", () => setScreenshot(String(reader.result)));
+  reader.readAsDataURL(file);
+}
+
+function handleScreenshotPaste(event) {
+  const items = event.clipboardData ? Array.from(event.clipboardData.items) : [];
+  const imageItem = items.find((item) => item.type.startsWith("image/"));
+  if (!imageItem) return;
+
+  event.preventDefault();
+  readImageFile(imageItem.getAsFile());
+}
+
+function deleteScreenshot() {
+  screenshot = null;
+  renderScreenshot();
+  saveState();
+}
+
+function setPanelWidth(value) {
+  const availableMaximum = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, window.innerWidth - 80));
+  panelWidth = Math.round(Math.max(MIN_PANEL_WIDTH, Math.min(availableMaximum, value)));
+  document.documentElement.style.setProperty("--panel-width", `${panelWidth}px`);
+}
+
+function setPanelOpen(nextOpen, focusControl = false) {
+  panelOpen = nextOpen;
+  elements.appShell.classList.toggle("panel-collapsed", !panelOpen);
+  elements.panel.setAttribute("aria-hidden", String(!panelOpen));
+  if (focusControl) (panelOpen ? elements.panelClose : elements.panelOpen).focus();
+  scheduleSave();
+}
+
+function beginPanelResize(event) {
+  if (event.button !== 0 || window.innerWidth <= 700) return;
+  event.preventDefault();
+  elements.panelResizer.classList.add("resizing");
+  elements.panelResizer.setPointerCapture(event.pointerId);
+}
+
+function resizePanel(event) {
+  if (!elements.panelResizer.hasPointerCapture(event.pointerId)) return;
+  setPanelWidth(event.clientX);
+}
+
+function endPanelResize(event) {
+  if (!elements.panelResizer.hasPointerCapture(event.pointerId)) return;
+  elements.panelResizer.releasePointerCapture(event.pointerId);
+  elements.panelResizer.classList.remove("resizing");
+  saveState();
+}
+
+function handleResizerKeydown(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  setPanelWidth(panelWidth + (event.key === "ArrowRight" ? 16 : -16));
+  scheduleSave();
+}
+
 function applyFontSize(nextSize) {
   fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, nextSize));
   document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
@@ -429,7 +521,14 @@ function changeFontSize(amount) {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: getEditorText(), fontSize, language }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    code: getEditorText(),
+    fontSize,
+    language,
+    panelOpen,
+    panelWidth,
+    screenshot,
+  }));
 }
 
 function scheduleSave() {
@@ -446,6 +545,11 @@ function loadState() {
     language = Object.hasOwn(LANGUAGE_CONFIGS, saved.language) || saved.language === "python" || saved.language === "plain"
       ? saved.language
       : DEFAULT_LANGUAGE;
+    panelOpen = typeof saved.panelOpen === "boolean" ? saved.panelOpen : true;
+    panelWidth = Number.isFinite(saved.panelWidth) ? saved.panelWidth : DEFAULT_PANEL_WIDTH;
+    screenshot = typeof saved.screenshot === "string" && saved.screenshot.startsWith("data:image/")
+      ? saved.screenshot
+      : null;
     return saved.code || "";
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -493,11 +597,29 @@ elements.code.addEventListener("compositionend", () => {
 elements.fontDecrease.addEventListener("click", () => changeFontSize(-1));
 elements.fontIncrease.addEventListener("click", () => changeFontSize(1));
 elements.language.addEventListener("change", handleLanguageChange);
+elements.panelClose.addEventListener("click", () => setPanelOpen(false, true));
+elements.panelOpen.addEventListener("click", () => setPanelOpen(true, true));
+elements.panelResizer.addEventListener("pointerdown", beginPanelResize);
+elements.panelResizer.addEventListener("pointermove", resizePanel);
+elements.panelResizer.addEventListener("pointerup", endPanelResize);
+elements.panelResizer.addEventListener("pointercancel", endPanelResize);
+elements.panelResizer.addEventListener("keydown", handleResizerKeydown);
+elements.screenshotUpload.addEventListener("click", () => elements.screenshotFile.click());
+elements.screenshotFile.addEventListener("change", () => {
+  readImageFile(elements.screenshotFile.files[0]);
+  elements.screenshotFile.value = "";
+});
+elements.screenshotDelete.addEventListener("click", deleteScreenshot);
+document.addEventListener("paste", handleScreenshotPaste);
 document.addEventListener("keydown", handleFontSizeShortcut);
 window.addEventListener("beforeunload", saveState);
+window.addEventListener("resize", () => setPanelWidth(panelWidth));
 
 const initialCode = loadState();
 applyFontSize(fontSize);
+setPanelWidth(panelWidth);
+setPanelOpen(panelOpen);
 elements.language.value = language;
+renderScreenshot();
 renderEditor(initialCode);
 elements.code.focus();
